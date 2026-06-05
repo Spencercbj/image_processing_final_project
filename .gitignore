@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
+# Model outputs and weights
+results/
+checkpoints/
+*.pth
