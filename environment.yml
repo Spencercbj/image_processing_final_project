@@ -1,0 +1,5 @@
+name: image-processing-final
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
