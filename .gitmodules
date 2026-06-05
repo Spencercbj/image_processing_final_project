@@ -1,0 +1,3 @@
+[submodule "method/EVSSM"]
+	path = method/EVSSM
+	url = https://github.com/kkkls/EVSSM.git
