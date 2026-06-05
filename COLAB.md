@@ -154,6 +154,17 @@ Use this when you want to avoid tile stitching. Since the current `img/` files a
   --max-side 1536
 ```
 
+To run the original image size without resizing, omit `--max-side`:
+
+```python
+!python scripts/evssm_infer_whole_image.py \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output-dir results/EVSSM/RealBlurJ_whole_original \
+  --limit 1
+```
+
+This sends the full-resolution image directly into EVSSM. It needs much more GPU memory than the `--max-side` version. If Colab reports CUDA OOM or an internal CUDA error, use `--max-side 1536`, `--max-side 1024`, or the tiled inference command above.
+
 GoPro checkpoint:
 
 ```python
