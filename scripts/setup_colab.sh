@@ -37,17 +37,21 @@ if shutil.which("nvcc") is None:
     raise SystemExit("nvcc was not found. mamba-ssm needs a Colab GPU runtime with CUDA compiler support.")
 PY
 
-MAX_JOBS="${MAX_JOBS:-2}" python -m pip install causal-conv1d==1.4.0 --no-build-isolation
 MAX_JOBS="${MAX_JOBS:-2}" python -m pip install mamba-ssm==2.2.2 --no-build-isolation
+
+if [[ "${INSTALL_CAUSAL_CONV1D:-0}" == "1" ]]; then
+  MAX_JOBS="${MAX_JOBS:-2}" python -m pip install causal-conv1d==1.4.0 --no-build-isolation -v
+else
+  echo "Skipping causal-conv1d. EVSSM inference uses mamba_ssm selective_scan and does not require causal-conv1d."
+  echo "Set INSTALL_CAUSAL_CONV1D=1 before running this script if you explicitly need causal-conv1d."
+fi
 
 python - <<'PY'
 import torch
 import mamba_ssm
-import causal_conv1d
 from mamba_ssm import Mamba
 
 print("mamba_ssm:", mamba_ssm.__version__)
-print("causal_conv1d import ok")
 print("Mamba import ok:", Mamba)
 
 x = torch.randn(1, 64, 64, device="cuda")

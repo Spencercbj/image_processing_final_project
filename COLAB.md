@@ -4,6 +4,8 @@ This guide runs the EVSSM inference scripts in Google Colab without Conda.
 
 Colab runtimes change over time, so the notebook cells install the Python packages inside the active runtime instead of relying on a prebuilt local environment.
 
+All command blocks below are intended to be pasted into Colab notebook cells. Blocks starting with `%%bash` must have `%%bash` as the first line of the cell.
+
 ## 1. Enable GPU
 
 In Colab:
@@ -16,13 +18,11 @@ Then verify:
 
 ```python
 !nvidia-smi
-!python - <<'PY'
 import torch
 print("torch:", torch.__version__)
 print("cuda build:", torch.version.cuda)
 print("cuda available:", torch.cuda.is_available())
 print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "no gpu")
-PY
 ```
 
 ## 2. Get The Project Into Colab
@@ -33,7 +33,9 @@ Use this if the repository is on GitHub:
 
 ```python
 %cd /content
-!git clone --recursive <YOUR_REPO_URL> image_processing_final_project
+REPO_URL = "PASTE_YOUR_REPO_URL_HERE"
+assert REPO_URL != "PASTE_YOUR_REPO_URL_HERE", "Set REPO_URL before running this cell."
+!git clone --recursive {REPO_URL} image_processing_final_project
 %cd /content/image_processing_final_project
 ```
 
@@ -64,7 +66,8 @@ Then change into the project folder. Adjust the path if yours is different:
 The project should contain:
 
 ```text
-img/
+img/                               # input images only
+checkpoints/                       # model weights
 checkpoints/net_g_GoPro.pth
 checkpoints/net_g_realblur_j.pth
 checkpoints/net_g_realblur_r.pth
@@ -81,6 +84,29 @@ Check them in Colab:
 !test -f methods/EVSSM/models/EVSSM.py && echo "EVSSM submodule ok"
 ```
 
+If the `checkpoints/` folder is empty in Colab and your weights are stored in Google Drive, copy them into the current Colab project folder.
+
+First mount Drive if it is not already mounted:
+
+```python
+from google.colab import drive
+drive.mount("/content/drive")
+```
+
+Then set the Drive folder that contains the checkpoint files and copy them:
+
+```python
+DRIVE_CHECKPOINT_DIR = "/content/drive/MyDrive/EVSSM_checkpoints"
+
+!mkdir -p checkpoints
+!cp "{DRIVE_CHECKPOINT_DIR}/net_g_GoPro.pth" checkpoints/
+!cp "{DRIVE_CHECKPOINT_DIR}/net_g_realblur_j.pth" checkpoints/
+!cp "{DRIVE_CHECKPOINT_DIR}/net_g_realblur_r.pth" checkpoints/
+!ls -lh checkpoints
+```
+
+If your checkpoint folder has a different name, change `DRIVE_CHECKPOINT_DIR` before running the cell.
+
 ## 4. Install EVSSM Dependencies
 
 Run:
@@ -89,7 +115,15 @@ Run:
 !bash scripts/setup_colab.sh
 ```
 
-This installs build tools, project dependencies, `causal-conv1d==1.4.0`, and `mamba-ssm==2.2.2` against Colab's active CUDA-enabled PyTorch.
+This installs build tools, project dependencies, and `mamba-ssm==2.2.2` against Colab's active CUDA-enabled PyTorch.
+
+`causal-conv1d` is skipped by default in Colab because it often fails while building a CUDA wheel. The EVSSM inference scripts in this project use `mamba_ssm.ops.selective_scan_interface`, so `causal-conv1d` is not required for the current pipeline.
+
+If you explicitly need `causal-conv1d`, run:
+
+```python
+!INSTALL_CAUSAL_CONV1D=1 bash scripts/setup_colab.sh
+```
 
 If Colab crashes or asks for a runtime restart after dependency installation, restart the runtime and run the cells again from step 1. Pip-built CUDA extensions may need a clean runtime after installation.
 
@@ -104,7 +138,8 @@ Tiled inference dry run:
 Whole-image dry run:
 
 ```python
-!python scripts/evssm_infer_whole_image.py \
+%%bash
+python scripts/evssm_infer_whole_image.py \
   --checkpoint checkpoints/net_g_GoPro.pth \
   --output-dir results/EVSSM/GoPro_whole_1536 \
   --limit 1 \
@@ -119,7 +154,8 @@ Whole-image dry run:
 Use this when full-resolution images do not fit in GPU memory:
 
 ```python
-!python scripts/evssm_infer_folder.py \
+%%bash
+python scripts/evssm_infer_folder.py \
   --input img \
   --checkpoint checkpoints/net_g_realblur_j.pth \
   --output results/EVSSM/RealBlurJ_tile768 \
@@ -132,7 +168,8 @@ Use this when full-resolution images do not fit in GPU memory:
 If Colab runs out of memory:
 
 ```python
-!python scripts/evssm_infer_folder.py \
+%%bash
+python scripts/evssm_infer_folder.py \
   --input img \
   --checkpoint checkpoints/net_g_realblur_j.pth \
   --output results/EVSSM/RealBlurJ_tile512 \
@@ -147,7 +184,8 @@ If Colab runs out of memory:
 Use this when you want to avoid tile stitching. Since the current `img/` files are large, use `--max-side` first:
 
 ```python
-!python scripts/evssm_infer_whole_image.py \
+%%bash
+python scripts/evssm_infer_whole_image.py \
   --checkpoint checkpoints/net_g_realblur_j.pth \
   --output-dir results/EVSSM/RealBlurJ_whole_1536 \
   --limit 1 \
@@ -157,7 +195,8 @@ Use this when you want to avoid tile stitching. Since the current `img/` files a
 To run the original image size without resizing, omit `--max-side`:
 
 ```python
-!python scripts/evssm_infer_whole_image.py \
+%%bash
+python scripts/evssm_infer_whole_image.py \
   --checkpoint checkpoints/net_g_realblur_j.pth \
   --output-dir results/EVSSM/RealBlurJ_whole_original \
   --limit 1
@@ -168,7 +207,8 @@ This sends the full-resolution image directly into EVSSM. It needs much more GPU
 GoPro checkpoint:
 
 ```python
-!python scripts/evssm_infer_whole_image.py \
+%%bash
+python scripts/evssm_infer_whole_image.py \
   --checkpoint checkpoints/net_g_GoPro.pth \
   --output-dir results/EVSSM/GoPro_whole_1536 \
   --limit 1 \
@@ -191,6 +231,14 @@ files.download("evssm_results.zip")
 ```
 
 ## Troubleshooting
+
+If `causal-conv1d` fails while building wheels, use the default Colab setup:
+
+```python
+!bash scripts/setup_colab.sh
+```
+
+The default setup skips `causal-conv1d` because it is not required by this project's EVSSM inference path.
 
 If `mamba-ssm` fails with `No module named 'torch'`, make sure Colab GPU runtime has PyTorch:
 
@@ -215,7 +263,8 @@ If it fails with `nvcc was not found`, switch to a GPU runtime and rerun:
 If whole-image inference fails with CUDA internal errors or OOM, lower `--max-side`:
 
 ```python
-!python scripts/evssm_infer_whole_image.py \
+%%bash
+python scripts/evssm_infer_whole_image.py \
   --checkpoint checkpoints/net_g_realblur_j.pth \
   --output-dir results/EVSSM/RealBlurJ_whole_1024 \
   --limit 1 \
