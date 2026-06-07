@@ -267,6 +267,36 @@ python scripts/evssm_infer_folder.py \
   --limit 1
 ```
 
+For deblurring, tile edges can produce artifacts because each tile has less context near its borders. The `crop` blend mode gives very low weight to tile borders and prefers each tile's center region in overlaps. This is often better than averaging for high-resolution deblurring:
+
+```python
+%%bash
+python scripts/evssm_infer_folder.py \
+  --input img \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output results/EVSSM/RealBlurJ_tile3072_crop_from08 \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --start-index 8 \
+  --limit 1
+```
+
+If A100 80GB still has plenty of memory, try a larger tile:
+
+```python
+%%bash
+python scripts/evssm_infer_folder.py \
+  --input img \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output results/EVSSM/RealBlurJ_tile4096_crop_from08 \
+  --tile-size 4096 \
+  --overlap 640 \
+  --blend crop \
+  --start-index 8 \
+  --limit 1
+```
+
 ## 7. Download Results
 
 Zip results:
