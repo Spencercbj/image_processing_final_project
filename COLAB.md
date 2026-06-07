@@ -116,8 +116,15 @@ Run:
 ```
 
 This installs build tools, project dependencies, and `mamba-ssm==2.2.2` against Colab's active CUDA-enabled PyTorch.
+If `mamba-ssm==2.2.2` cannot build on the current Colab runtime, the setup script automatically tries `mamba-ssm==2.3.2.post1` as a fallback.
 
 `causal-conv1d` is skipped by default in Colab because it often fails while building a CUDA wheel. The EVSSM inference scripts in this project use `mamba_ssm.ops.selective_scan_interface`, so `causal-conv1d` is not required for the current pipeline.
+
+To explicitly use the newer Mamba package first:
+
+```python
+!MAMBA_SSM_VERSION=2.3.2.post1 bash scripts/setup_colab.sh
+```
 
 If you explicitly need `causal-conv1d`, run:
 
@@ -239,6 +246,30 @@ If `causal-conv1d` fails while building wheels, use the default Colab setup:
 ```
 
 The default setup skips `causal-conv1d` because it is not required by this project's EVSSM inference path.
+
+If `mamba-ssm` fails while building wheels, pull the latest setup script and rerun:
+
+```python
+!git pull
+!bash scripts/setup_colab.sh
+```
+
+The setup script first tries `mamba-ssm==2.2.2`, then falls back to `mamba-ssm==2.3.2.post1`. To skip the old version and try the newer one directly:
+
+```python
+!MAMBA_SSM_VERSION=2.3.2.post1 bash scripts/setup_colab.sh
+```
+
+If it still fails, print the Colab runtime versions:
+
+```python
+import sys, torch, shutil
+print("python:", sys.version)
+print("torch:", torch.__version__)
+print("torch cuda:", torch.version.cuda)
+print("cuda available:", torch.cuda.is_available())
+print("nvcc:", shutil.which("nvcc"))
+```
 
 If `mamba-ssm` fails with `No module named 'torch'`, make sure Colab GPU runtime has PyTorch:
 

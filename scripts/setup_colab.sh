@@ -24,8 +24,10 @@ python -m pip install \
 
 python - <<'PY'
 import shutil
+import sys
 import torch
 
+print("python:", sys.version)
 print("torch:", torch.__version__)
 print("torch cuda build:", torch.version.cuda)
 print("cuda available:", torch.cuda.is_available())
@@ -37,7 +39,24 @@ if shutil.which("nvcc") is None:
     raise SystemExit("nvcc was not found. mamba-ssm needs a Colab GPU runtime with CUDA compiler support.")
 PY
 
-MAX_JOBS="${MAX_JOBS:-2}" python -m pip install mamba-ssm==2.2.2 --no-build-isolation
+MAMBA_SSM_VERSION="${MAMBA_SSM_VERSION:-2.2.2}"
+MAMBA_SSM_FALLBACK_VERSION="${MAMBA_SSM_FALLBACK_VERSION:-2.3.2.post1}"
+
+install_mamba_ssm() {
+  local version="$1"
+  echo "Installing mamba-ssm==${version}"
+  MAX_JOBS="${MAX_JOBS:-2}" python -m pip install "mamba-ssm==${version}" --no-build-isolation --no-cache-dir -v
+}
+
+if ! install_mamba_ssm "${MAMBA_SSM_VERSION}"; then
+  echo "mamba-ssm==${MAMBA_SSM_VERSION} failed to build or install."
+  if [[ "${MAMBA_SSM_FALLBACK_VERSION}" != "${MAMBA_SSM_VERSION}" ]]; then
+    echo "Trying fallback mamba-ssm==${MAMBA_SSM_FALLBACK_VERSION}."
+    install_mamba_ssm "${MAMBA_SSM_FALLBACK_VERSION}"
+  else
+    exit 1
+  fi
+fi
 
 if [[ "${INSTALL_CAUSAL_CONV1D:-0}" == "1" ]]; then
   MAX_JOBS="${MAX_JOBS:-2}" python -m pip install causal-conv1d==1.4.0 --no-build-isolation -v
@@ -50,9 +69,11 @@ python - <<'PY'
 import torch
 import mamba_ssm
 from mamba_ssm import Mamba
+from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
 
 print("mamba_ssm:", mamba_ssm.__version__)
 print("Mamba import ok:", Mamba)
+print("selective_scan_fn import ok:", selective_scan_fn)
 
 x = torch.randn(1, 64, 64, device="cuda")
 model = Mamba(d_model=64, d_state=16, d_conv=4, expand=2).cuda().eval()
