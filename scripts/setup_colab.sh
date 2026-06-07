@@ -39,8 +39,8 @@ if shutil.which("nvcc") is None:
     raise SystemExit("nvcc was not found. mamba-ssm needs a Colab GPU runtime with CUDA compiler support.")
 PY
 
-MAMBA_SSM_VERSION="${MAMBA_SSM_VERSION:-2.2.2}"
-MAMBA_SSM_FALLBACK_VERSION="${MAMBA_SSM_FALLBACK_VERSION:-2.3.2.post1}"
+MAMBA_SSM_VERSION="${MAMBA_SSM_VERSION:-2.3.2.post1}"
+MAMBA_SSM_FALLBACK_VERSION="${MAMBA_SSM_FALLBACK_VERSION:-2.2.2}"
 
 install_mamba_ssm() {
   local version="$1"

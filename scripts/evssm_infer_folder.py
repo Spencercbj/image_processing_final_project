@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument("--overlap", type=int, default=96, help="Overlap between neighboring tiles.")
     parser.add_argument("--blend", default="cosine", choices=["cosine", "uniform"], help="Tile blending mode.")
     parser.add_argument("--pad-multiple", type=int, default=4, help="Pad each tile so H/W are divisible by this value.")
+    parser.add_argument("--start-index", type=int, default=1, help="1-based index in sorted input order to start from.")
     parser.add_argument("--limit", type=int, default=0, help="Only process the first N images. 0 means all images.")
     parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"], help="Inference device.")
     parser.add_argument("--dry-run", action="store_true", help="List planned inputs/outputs without running the model.")
@@ -38,6 +39,17 @@ def parse_args():
 def list_images(input_dir):
     input_dir = Path(input_dir)
     return sorted(p for p in input_dir.iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS)
+
+
+def select_images(image_paths, start_index, limit):
+    if start_index < 1:
+        raise ValueError("--start-index is 1-based and must be >= 1")
+
+    indexed_paths = list(enumerate(image_paths, start=1))
+    indexed_paths = indexed_paths[start_index - 1 :]
+    if limit > 0:
+        indexed_paths = indexed_paths[:limit]
+    return indexed_paths
 
 
 def load_state_dict(checkpoint_path):
@@ -139,22 +151,22 @@ def main():
     checkpoint = Path(args.checkpoint)
 
     images = list_images(input_dir)
-    if args.limit > 0:
-        images = images[: args.limit]
+    indexed_images = select_images(images, args.start_index, args.limit)
 
     print(f"input: {input_dir}")
     print(f"output: {output_dir}")
     print(f"checkpoint: {checkpoint}")
-    print(f"images: {len(images)}")
+    print(f"images: {len(indexed_images)} / {len(images)}")
+    print(f"start_index: {args.start_index}")
     print(f"tile_size: {args.tile_size}, overlap: {args.overlap}, blend: {args.blend}")
 
-    if not images:
+    if not indexed_images:
         raise SystemExit("No images found.")
 
     if args.dry_run:
-        for image_path in images:
+        for image_index, image_path in indexed_images:
             with Image.open(image_path) as image:
-                print(f"{image_path.name}: {image.size} -> {output_dir / image_path.name}")
+                print(f"{image_index:02d}. {image_path.name}: {image.size} -> {output_dir / image_path.name}")
         return
 
     if args.device == "cuda" and not torch.cuda.is_available():
@@ -167,7 +179,7 @@ def main():
     model.to(args.device)
     model.eval()
 
-    for image_path in tqdm(images, desc="EVSSM inference"):
+    for image_index, image_path in tqdm(indexed_images, desc="EVSSM inference"):
         image = Image.open(image_path).convert("RGB")
         image_tensor = TF.to_tensor(image)
 

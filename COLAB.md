@@ -115,15 +115,15 @@ Run:
 !bash scripts/setup_colab.sh
 ```
 
-This installs build tools, project dependencies, and `mamba-ssm==2.2.2` against Colab's active CUDA-enabled PyTorch.
-If `mamba-ssm==2.2.2` cannot build on the current Colab runtime, the setup script automatically tries `mamba-ssm==2.3.2.post1` as a fallback.
+This installs build tools, project dependencies, and `mamba-ssm==2.3.2.post1` against Colab's active CUDA-enabled PyTorch.
+Colab currently tends to use newer Python/PyTorch builds, so the setup script uses the newer Mamba package first. If it cannot build on the current Colab runtime, the setup script automatically tries `mamba-ssm==2.2.2` as a fallback.
 
 `causal-conv1d` is skipped by default in Colab because it often fails while building a CUDA wheel. The EVSSM inference scripts in this project use `mamba_ssm.ops.selective_scan_interface`, so `causal-conv1d` is not required for the current pipeline.
 
-To explicitly use the newer Mamba package first:
+To explicitly use the local-project Mamba version first:
 
 ```python
-!MAMBA_SSM_VERSION=2.3.2.post1 bash scripts/setup_colab.sh
+!MAMBA_SSM_VERSION=2.2.2 MAMBA_SSM_FALLBACK_VERSION=2.3.2.post1 bash scripts/setup_colab.sh
 ```
 
 If you explicitly need `causal-conv1d`, run:
@@ -211,6 +211,25 @@ python scripts/evssm_infer_whole_image.py \
 
 This sends the full-resolution image directly into EVSSM. It needs much more GPU memory than the `--max-side` version. If Colab reports CUDA OOM or an internal CUDA error, use `--max-side 1536`, `--max-side 1024`, or the tiled inference command above.
 
+For an L4 GPU, try full-resolution whole-image inference with half precision:
+
+```python
+%%bash
+python scripts/evssm_infer_whole_image.py \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output-dir results/EVSSM/RealBlurJ_whole_original_fp16 \
+  --limit 1 \
+  --precision fp16
+```
+
+If you just hit CUDA OOM, restart the runtime before retrying, or clear unused GPU memory:
+
+```python
+import torch, gc
+gc.collect()
+torch.cuda.empty_cache()
+```
+
 GoPro checkpoint:
 
 ```python
@@ -220,6 +239,32 @@ python scripts/evssm_infer_whole_image.py \
   --output-dir results/EVSSM/GoPro_whole_1536 \
   --limit 1 \
   --max-side 1536
+```
+
+To start from any image in sorted filename order, use `--start-index`. This example tests the 8th image only:
+
+```python
+%%bash
+python scripts/evssm_infer_whole_image.py \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output-dir results/EVSSM/RealBlurJ_whole_original_from08 \
+  --start-index 8 \
+  --limit 1
+```
+
+You can also use `--start-index` with tiled inference:
+
+```python
+%%bash
+python scripts/evssm_infer_folder.py \
+  --input img \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output results/EVSSM/RealBlurJ_tile768_from08 \
+  --tile-size 768 \
+  --overlap 128 \
+  --blend cosine \
+  --start-index 8 \
+  --limit 1
 ```
 
 ## 7. Download Results
@@ -254,10 +299,10 @@ If `mamba-ssm` fails while building wheels, pull the latest setup script and rer
 !bash scripts/setup_colab.sh
 ```
 
-The setup script first tries `mamba-ssm==2.2.2`, then falls back to `mamba-ssm==2.3.2.post1`. To skip the old version and try the newer one directly:
+The setup script first tries `mamba-ssm==2.3.2.post1`, then falls back to `mamba-ssm==2.2.2`. To force the local-project version first:
 
 ```python
-!MAMBA_SSM_VERSION=2.3.2.post1 bash scripts/setup_colab.sh
+!MAMBA_SSM_VERSION=2.2.2 MAMBA_SSM_FALLBACK_VERSION=2.3.2.post1 bash scripts/setup_colab.sh
 ```
 
 If it still fails, print the Colab runtime versions:
@@ -300,4 +345,15 @@ python scripts/evssm_infer_whole_image.py \
   --output-dir results/EVSSM/RealBlurJ_whole_1024 \
   --limit 1 \
   --max-side 1024
+```
+
+If the failure says it tried to allocate several GiB and only a few GiB were free, retry whole-image inference with half precision:
+
+```python
+%%bash
+python scripts/evssm_infer_whole_image.py \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output-dir results/EVSSM/RealBlurJ_whole_original_fp16 \
+  --limit 1 \
+  --precision fp16
 ```
