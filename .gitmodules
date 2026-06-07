@@ -1,3 +1,6 @@
 [submodule "methods/EVSSM"]
 	path = methods/EVSSM
 	url = https://github.com/kkkls/EVSSM.git
+[submodule "methods/DarkIR"]
+	path = methods/DarkIR
+	url = https://github.com/cidautai/DarkIR.git
