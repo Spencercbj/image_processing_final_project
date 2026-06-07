@@ -1,18 +1,30 @@
-# DarkIR On Google Colab
+# DarkIR 在 Google Colab 上的建置與 Inference 流程
 
-This guide runs `methods/DarkIR` on this project's `img/` folder.
+這份教本是給 Colab notebook 使用的。所有程式區塊都可以直接貼到 Colab cell 執行；如果 cell 第一行是 `%%bash`，它必須放在該 cell 的第一行。
 
-All command blocks are intended for Colab notebook cells. Blocks starting with `%%bash` must have `%%bash` as the first line of the cell.
+本教本預設你要使用的模型是：
 
-## 1. Enable GPU
+```text
+DarkIR_384.pt
+```
 
-In Colab:
+這個 checkpoint 建議搭配：
+
+```text
+methods/DarkIR/options/inference/real_lsrw.yml
+```
+
+原因是 `DarkIR_384.pt` 是 `width: 32` 架構，而 `real_lsrw.yml` 也是 `width: 32`。不要用 `LOLBlur.yml` 搭配 `DarkIR_384.pt`，因為 `LOLBlur.yml` 是 `width: 64`，權重和模型結構會不匹配。
+
+## 1. 開啟 GPU
+
+在 Colab 選：
 
 ```text
 Runtime > Change runtime type > Hardware accelerator > GPU
 ```
 
-Verify:
+確認 GPU：
 
 ```python
 !nvidia-smi
@@ -22,9 +34,9 @@ print("cuda available:", torch.cuda.is_available())
 print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "no gpu")
 ```
 
-## 2. Pull The Project And Submodules
+## 2. 進入專案並更新 DarkIR submodule
 
-If the project is already cloned:
+如果專案已經在 Colab 裡：
 
 ```python
 %cd /content/image_processing_final_project
@@ -32,7 +44,7 @@ If the project is already cloned:
 !git submodule update --init --recursive methods/DarkIR
 ```
 
-If cloning fresh:
+如果你是重新 clone：
 
 ```python
 %cd /content
@@ -43,172 +55,120 @@ assert REPO_URL != "PASTE_YOUR_REPO_URL_HERE", "Set REPO_URL before running this
 !git submodule update --init --recursive methods/DarkIR
 ```
 
-Check:
+確認 DarkIR 和圖片存在：
 
 ```python
 !test -f methods/DarkIR/archs/DarkIR.py && echo "DarkIR submodule ok"
 !find img -maxdepth 1 -type f | head
 ```
 
-## 3. Install DarkIR Dependencies
-
-Run:
+## 3. 安裝 DarkIR 依賴
 
 ```python
 !bash scripts/setup_darkir_colab.sh
 ```
 
-This keeps Colab's active PyTorch installation and installs the extra packages needed by DarkIR. It does not force the exact `torch==2.5.1` from the official DarkIR requirements, because changing PyTorch inside Colab can break the GPU runtime.
+這個腳本會保留 Colab 目前的 PyTorch，不會強制安裝 DarkIR 官方 `requirements.txt` 裡指定的 `torch==2.5.1`。在 Colab 裡重裝 PyTorch 很容易破壞 GPU runtime，所以這裡只安裝 DarkIR 額外需要的套件。
 
-## 4. Add DarkIR Checkpoints From Google Drive
+## 4. 從 Google Drive 複製 `DarkIR_384.pt`
 
-DarkIR checkpoints are not stored inside `img/`. Put them in a Drive folder, then copy them into the Colab project.
-
-Mount Drive:
+先掛載 Google Drive：
 
 ```python
 from google.colab import drive
 drive.mount("/content/drive")
 ```
 
-Set your Drive checkpoint folder and copy files:
+假設你的 checkpoint 放在：
+
+```text
+MyDrive/DarkIR_checkpoints/DarkIR_384.pt
+```
+
+執行：
 
 ```python
-DARKIR_DRIVE_CHECKPOINT_DIR = "/content/drive/MyDrive/DarkIR_checkpoints"
+%cd /content/image_processing_final_project
 
 !mkdir -p methods/DarkIR/models
-!cp "{DARKIR_DRIVE_CHECKPOINT_DIR}"/*.pt methods/DarkIR/models/
-!cp "{DARKIR_DRIVE_CHECKPOINT_DIR}"/*.pth methods/DarkIR/models/ 2>/dev/null || true
+!cp /content/drive/MyDrive/DarkIR_checkpoints/DarkIR_384.pt methods/DarkIR/models/
 !ls -lh methods/DarkIR/models
 ```
 
-Common checkpoint names used by DarkIR configs:
+如果你的檔案在其他資料夾，請修改這段路徑：
 
 ```text
-methods/DarkIR/models/DarkIR_64width.pt
+/content/drive/MyDrive/DarkIR_checkpoints/DarkIR_384.pt
+```
+
+最後你應該會看到：
+
+```text
 methods/DarkIR/models/DarkIR_384.pt
-methods/DarkIR/models/DarkIR_1k_cr_mt.pt
-methods/DarkIR/models/darkir_1k_cr_mt.pt
-methods/DarkIR/models/RetinexFormer_LOL_v2_real.pth
 ```
 
-The default config in this guide is:
+## 5. Dry Run 確認路徑
 
-```text
-methods/DarkIR/options/inference/LOLBlur.yml
-```
-
-It expects:
-
-```text
-methods/DarkIR/models/DarkIR_64width.pt
-```
-
-## 5. Dry Run
-
-Whole-image dry run:
+先確認腳本會讀到圖片、config 和 checkpoint，但不真的跑模型：
 
 ```python
 %%bash
 python scripts/darkir_infer_folder.py \
   --input img \
-  --output results/DarkIR/LOLBlur_whole_dryrun \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
+  --output results/DarkIR/DarkIR384_dryrun \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
   --start-index 1 \
   --limit 1 \
   --dry-run
 ```
 
-Test the 8th image:
+測第 8 張大圖的 dry run：
 
 ```python
 %%bash
 python scripts/darkir_infer_folder.py \
   --input img \
-  --output results/DarkIR/LOLBlur_whole_from08_dryrun \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
+  --output results/DarkIR/DarkIR384_dryrun_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
   --start-index 8 \
   --limit 1 \
   --dry-run
 ```
 
-## 6. Whole-Image Inference
+## 6. 先跑第一張 Whole-Image
 
-Run one image at original resolution:
+這是不切 tile、不縮圖，直接整張圖片送進 DarkIR：
 
 ```python
 %%bash
 python scripts/darkir_infer_folder.py \
   --input img \
-  --output results/DarkIR/LOLBlur_whole_original \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
+  --output results/DarkIR/DarkIR384_whole_first \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
   --start-index 1 \
   --limit 1
 ```
 
-Run the 8th image at original resolution:
+如果成功，輸出會在：
 
-```python
-%%bash
-python scripts/darkir_infer_folder.py \
-  --input img \
-  --output results/DarkIR/LOLBlur_whole_original_from08 \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
-  --start-index 8 \
-  --limit 1
+```text
+results/DarkIR/DarkIR384_whole_first/
 ```
 
-If whole-image inference runs out of memory, try half precision:
+## 7. 測第 8 張大圖
+
+第 8 張是目前 `img/` 裡很大的圖片之一。建議先用 tiled inference 測：
 
 ```python
 %%bash
 python scripts/darkir_infer_folder.py \
   --input img \
-  --output results/DarkIR/LOLBlur_whole_original_fp16_from08 \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
-  --start-index 8 \
-  --limit 1 \
-  --precision fp16
-```
-
-Or resize the longest side:
-
-```python
-%%bash
-python scripts/darkir_infer_folder.py \
-  --input img \
-  --output results/DarkIR/LOLBlur_whole_2048_from08 \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
-  --start-index 8 \
-  --limit 1 \
-  --max-side 2048
-```
-
-## 7. Tiled Inference
-
-For large images, use tiled inference. `crop` blending is recommended because it gives low weight to tile borders and prefers the center of each tile.
-
-```python
-%%bash
-python scripts/darkir_infer_folder.py \
-  --input img \
-  --output results/DarkIR/LOLBlur_tile2048_crop_from08 \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
-  --tile-size 2048 \
-  --overlap 320 \
-  --blend crop \
-  --start-index 8 \
-  --limit 1
-```
-
-For A100 80GB, try larger tiles:
-
-```python
-%%bash
-python scripts/darkir_infer_folder.py \
-  --input img \
-  --output results/DarkIR/LOLBlur_tile3072_crop_from08 \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
+  --output results/DarkIR/DarkIR384_tile3072_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
   --tile-size 3072 \
   --overlap 512 \
   --blend crop \
@@ -216,69 +176,143 @@ python scripts/darkir_infer_folder.py \
   --limit 1
 ```
 
-Run all images with tiled inference:
+如果 `tile-size 3072` OOM，就改成比較保守的：
 
 ```python
 %%bash
 python scripts/darkir_infer_folder.py \
   --input img \
-  --output results/DarkIR/LOLBlur_tile2048_crop_all \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
+  --output results/DarkIR/DarkIR384_tile2048_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
   --tile-size 2048 \
   --overlap 320 \
-  --blend crop
-```
-
-## 8. Use A Different Checkpoint Or Config
-
-You can override the checkpoint path directly:
-
-```python
-%%bash
-python scripts/darkir_infer_folder.py \
-  --input img \
-  --output results/DarkIR/custom_checkpoint_from08 \
-  --config methods/DarkIR/options/inference/LOLBlur.yml \
-  --checkpoint methods/DarkIR/models/DarkIR_64width.pt \
+  --blend crop \
   --start-index 8 \
   --limit 1
 ```
 
-Other official inference configs:
-
-```text
-methods/DarkIR/options/inference/LOLBlur.yml
-methods/DarkIR/options/inference/real_lsrw.yml
-methods/DarkIR/options/inference/ExDark.yml
-```
-
-Use a checkpoint whose architecture matches the config. For example, `LOLBlur.yml` uses `width: 64`, while `real_lsrw.yml` uses `width: 32`.
-
-## 9. Download Results
+如果 A100 80GB 還很空，可以試更大的：
 
 ```python
-!zip -r darkir_results.zip results/DarkIR
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/DarkIR/DarkIR384_tile4096_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 4096 \
+  --overlap 640 \
+  --blend crop \
+  --start-index 8 \
+  --limit 1
 ```
+
+## 8. 跑全部圖片
+
+如果第 8 張測試結果和記憶體都 OK，可以跑全部：
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/DarkIR/DarkIR384_tile3072_all \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop
+```
+
+如果想從第 8 張開始跑到最後：
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/DarkIR/DarkIR384_tile3072_from08_to_end \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --start-index 8
+```
+
+## 9. 下載結果
+
+壓縮結果：
+
+```python
+!zip -r darkir384_results.zip results/DarkIR
+```
+
+下載：
 
 ```python
 from google.colab import files
-files.download("darkir_results.zip")
+files.download("darkir384_results.zip")
 ```
 
-## Troubleshooting
+## 10. 常見問題
 
-If the checkpoint file is missing:
+### 找不到 checkpoint
+
+確認檔案在：
 
 ```python
 !ls -lh methods/DarkIR/models
 ```
 
-If the checkpoint does not match the config, use the matching config/checkpoint pair. A `width: 64` checkpoint will not load cleanly into a `width: 32` model.
+應該要看到：
 
-If CUDA runs out of memory, try one of:
+```text
+DarkIR_384.pt
+```
+
+### checkpoint 和 config 不匹配
+
+`DarkIR_384.pt` 請使用：
+
+```text
+methods/DarkIR/options/inference/real_lsrw.yml
+```
+
+不要使用：
+
+```text
+methods/DarkIR/options/inference/LOLBlur.yml
+```
+
+因為 `LOLBlur.yml` 是 `width: 64`，而 `DarkIR_384.pt` 通常是 `width: 32`。
+
+### CUDA OOM
+
+優先嘗試：
+
+```text
+--tile-size 2048 --overlap 320 --blend crop
+```
+
+或使用半精度：
 
 ```text
 --precision fp16
---max-side 2048
---tile-size 2048 --overlap 320 --blend crop
+```
+
+例如：
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/DarkIR/DarkIR384_tile2048_fp16_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 2048 \
+  --overlap 320 \
+  --blend crop \
+  --precision fp16 \
+  --start-index 8 \
+  --limit 1
 ```
