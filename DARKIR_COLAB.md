@@ -2,6 +2,8 @@
 
 這份教本是給 Colab notebook 使用的。所有程式區塊都可以直接貼到 Colab cell 執行；如果 cell 第一行是 `%%bash`，它必須放在該 cell 的第一行。
 
+如果你要跑「DarkIR -> 混回原圖 -> EVSSM」串接流程，請看 [DARKIR_EVSSM_PIPELINE_COLAB.md](DARKIR_EVSSM_PIPELINE_COLAB.md)。
+
 本教本預設你要使用的模型是：
 
 ```text
@@ -254,7 +256,138 @@ from google.colab import files
 files.download("darkir384_results.zip")
 ```
 
-## 10. 常見問題
+## 10. DarkIR 接 EVSSM：先混回原圖降低過亮感
+
+如果 DarkIR 結果有些區域過亮，可以不要直接把 DarkIR 最終圖丟給 EVSSM，而是先和原圖混合：
+
+```text
+blended = alpha * DarkIR(input) + (1 - alpha) * input
+```
+
+建議先試：
+
+```text
+alpha = 0.6, 0.7, 0.8
+```
+
+`alpha` 越小，越接近原圖，亮度會被壓低更多；`alpha` 越大，越接近 DarkIR 結果，增亮和去雜訊效果會更強。
+
+### 10.1 先產生 DarkIR 結果
+
+例如先用 `DarkIR_384.pt` 跑第 8 張：
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/DarkIR/DarkIR384_tile3072_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --start-index 8 \
+  --limit 1
+```
+
+### 10.2 將 DarkIR 結果和原圖混合
+
+先 dry run：
+
+```python
+%%bash
+python scripts/blend_darkir_for_evssm.py \
+  --original img \
+  --darkir results/DarkIR/DarkIR384_tile3072_from08 \
+  --output results/Pipeline/DarkIR384_alpha07_for_EVSSM_from08 \
+  --alpha 0.7 \
+  --start-index 8 \
+  --limit 1 \
+  --dry-run
+```
+
+正式產生 EVSSM input：
+
+```python
+%%bash
+python scripts/blend_darkir_for_evssm.py \
+  --original img \
+  --darkir results/DarkIR/DarkIR384_tile3072_from08 \
+  --output results/Pipeline/DarkIR384_alpha07_for_EVSSM_from08 \
+  --alpha 0.7 \
+  --start-index 8 \
+  --limit 1
+```
+
+如果還是太亮，改用：
+
+```text
+--alpha 0.6
+```
+
+如果太暗或 DarkIR 效果被削弱太多，改用：
+
+```text
+--alpha 0.8
+```
+
+### 10.3 用混合結果當 EVSSM input
+
+```python
+%%bash
+python scripts/evssm_infer_folder.py \
+  --input results/Pipeline/DarkIR384_alpha07_for_EVSSM_from08 \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output results/Pipeline/DarkIR384_alpha07_EVSSM_RealBlurJ_from08 \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --limit 1
+```
+
+注意：這裡的 EVSSM input 資料夾已經只包含第 8 張，所以不需要再加 `--start-index 8`。如果你的混合資料夾包含全部圖片，就可以照常用 `--start-index` 和 `--limit`。
+
+### 10.4 跑全部圖片
+
+先跑全部 DarkIR：
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/DarkIR/DarkIR384_tile3072_all \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop
+```
+
+混回原圖：
+
+```python
+%%bash
+python scripts/blend_darkir_for_evssm.py \
+  --original img \
+  --darkir results/DarkIR/DarkIR384_tile3072_all \
+  --output results/Pipeline/DarkIR384_alpha07_for_EVSSM_all \
+  --alpha 0.7
+```
+
+丟進 EVSSM：
+
+```python
+%%bash
+python scripts/evssm_infer_folder.py \
+  --input results/Pipeline/DarkIR384_alpha07_for_EVSSM_all \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output results/Pipeline/DarkIR384_alpha07_EVSSM_RealBlurJ_all \
+  --tile-size 1536 \
+  --overlap 260 \
+  --blend crop
+```
+
+## 11. 常見問題
 
 ### 找不到 checkpoint
 

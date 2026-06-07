@@ -7,6 +7,7 @@ Colab runtimes change over time, so the notebook cells install the Python packag
 All command blocks below are intended to be pasted into Colab notebook cells. Blocks starting with `%%bash` must have `%%bash` as the first line of the cell.
 
 For DarkIR, use [DARKIR_COLAB.md](DARKIR_COLAB.md).
+For the DarkIR-to-EVSSM pipeline, use [DARKIR_EVSSM_PIPELINE_COLAB.md](DARKIR_EVSSM_PIPELINE_COLAB.md).
 
 ## 1. Enable GPU
 
