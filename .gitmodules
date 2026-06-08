@@ -4,3 +4,6 @@
 [submodule "methods/DarkIR"]
 	path = methods/DarkIR
 	url = https://github.com/cidautai/DarkIR.git
+[submodule "methods/Restormer"]
+	path = methods/Restormer
+	url = https://github.com/swz30/Restormer.git
