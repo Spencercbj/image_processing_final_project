@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument("--checkpoint", default=str(ROOT / "checkpoints" / "net_g_GoPro.pth"), help="EVSSM checkpoint path.")
     parser.add_argument("--tile-size", type=int, default=640, help="Tile size for inference. Use 0 for whole image.")
     parser.add_argument("--overlap", type=int, default=96, help="Overlap between neighboring tiles.")
-    parser.add_argument("--blend", default="cosine", choices=["cosine", "uniform"], help="Tile blending mode.")
+    parser.add_argument("--blend", default="cosine", choices=["cosine", "crop", "uniform"], help="Tile blending mode.")
     parser.add_argument("--pad-multiple", type=int, default=4, help="Pad each tile so H/W are divisible by this value.")
     parser.add_argument("--start-index", type=int, default=1, help="1-based index in sorted input order to start from.")
     parser.add_argument("--limit", type=int, default=0, help="Only process the first N images. 0 means all images.")
@@ -100,6 +100,21 @@ def cosine_ramp(length):
 def tile_weight(tile_h, tile_w, y, x, image_h, image_w, overlap, blend):
     weight = torch.ones((1, tile_h, tile_w))
     if blend == "uniform" or overlap <= 0:
+        return weight
+
+    if blend == "crop":
+        border_h = min(overlap // 2, tile_h // 2)
+        border_w = min(overlap // 2, tile_w // 2)
+
+        if y > 0 and border_h > 0:
+            weight[:, :border_h, :] = 1e-3
+        if y + tile_h < image_h and border_h > 0:
+            weight[:, -border_h:, :] = 1e-3
+        if x > 0 and border_w > 0:
+            weight[:, :, :border_w] = 1e-3
+        if x + tile_w < image_w and border_w > 0:
+            weight[:, :, -border_w:] = 1e-3
+
         return weight
 
     ramp_h = min(overlap, tile_h)
