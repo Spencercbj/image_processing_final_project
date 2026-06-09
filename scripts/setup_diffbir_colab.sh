@@ -15,6 +15,16 @@ fi
 
 cd "${DIFFBIR_DIR}"
 
+python - <<'PY'
+from pathlib import Path
+
+path = Path("diffbir/sampler/edm_sampler.py")
+text = path.read_text(encoding="utf-8")
+text = text.replace("torch.Tuple[int]", "tuple[int, ...]")
+path.write_text(text, encoding="utf-8")
+print("Patched DiffBIR torch.Tuple annotation for newer torch versions.")
+PY
+
 python -m pip install -U pip
 
 # Colab already provides a CUDA-enabled PyTorch build. DiffBIR's official
