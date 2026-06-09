@@ -287,7 +287,19 @@ results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring/
 
 ### 5.4 把 Restormer 結果送進 DiffBIR
 
-這裡用 DiffBIR 的 `sr` task 做盲影像修復，並設定 `--upscale 1`，讓 DiffBIR 繼續處理模糊/失真但輸出尺寸維持和輸入相同。`--captioner none` 比 LLaVA 省 VRAM，也比較保守。
+這裡用 DiffBIR 的 `sr` task 做盲影像修復，並設定 `--upscale 1`。因為第 8 張原始尺寸約是 `5304x7952`，DiffBIR 直接吃原尺寸會在 Colab 被 killed，所以先把 Restormer 輸出縮到 `max-side 2048` 給 DiffBIR，最後再 resize 回 Restormer 輸出尺寸。
+
+先準備 DiffBIR input：
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py prepare \
+  --input results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring \
+  --output results/PipelineRestormer/04a_diffbir_input_from08 \
+  --max-side 2048
+```
+
+再跑 DiffBIR。`--captioner none` 比 LLaVA 省 VRAM，也比較保守：
 
 ```python
 %%bash
@@ -302,8 +314,8 @@ python -u inference.py \
   --cfg_scale 4 \
   --noise_aug 0 \
   --steps 8 \
-  --input /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring \
-  --output /content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08 \
+  --input /content/image_processing_final_project/results/PipelineRestormer/04a_diffbir_input_from08 \
+  --output /content/image_processing_final_project/results/PipelineRestormer/04b_diffbir_small_from08 \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
@@ -318,7 +330,17 @@ python -u inference.py \
   --cldm_tile_stride 128
 ```
 
-輸出會直接存在：
+最後把 DiffBIR 結果 resize 回 Restormer 輸出尺寸：
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py restore \
+  --diffbir results/PipelineRestormer/04b_diffbir_small_from08 \
+  --reference results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring \
+  --output results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08
+```
+
+最終輸出會在：
 
 ```text
 results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/
@@ -366,6 +388,18 @@ python demo.py \
 
 ### 6.4 跑全部 DiffBIR
 
+先準備 DiffBIR input：
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py prepare \
+  --input results/PipelineRestormer/03_darkir_alpha07_restormer_all/Motion_Deblurring \
+  --output results/PipelineRestormer/04a_diffbir_input_all \
+  --max-side 2048
+```
+
+再跑 DiffBIR：
+
 ```python
 %%bash
 cd /content/image_processing_final_project/methods/DiffBIR
@@ -379,8 +413,8 @@ python -u inference.py \
   --cfg_scale 4 \
   --noise_aug 0 \
   --steps 8 \
-  --input /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_all/Motion_Deblurring \
-  --output /content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_all \
+  --input /content/image_processing_final_project/results/PipelineRestormer/04a_diffbir_input_all \
+  --output /content/image_processing_final_project/results/PipelineRestormer/04b_diffbir_small_all \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
@@ -393,6 +427,16 @@ python -u inference.py \
   --cldm_tiled \
   --cldm_tile_size 256 \
   --cldm_tile_stride 128
+```
+
+最後 resize 回 Restormer 輸出尺寸：
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py restore \
+  --diffbir results/PipelineRestormer/04b_diffbir_small_all \
+  --reference results/PipelineRestormer/03_darkir_alpha07_restormer_all/Motion_Deblurring \
+  --output results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_all
 ```
 
 ## 7. 高亮保護版：DarkIR 接 Restormer
@@ -472,6 +516,18 @@ results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from0
 
 ### 7.5 第 8 張：把 Restormer 結果送進 DiffBIR
 
+先準備 DiffBIR input：
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py prepare \
+  --input results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
+  --output results/PipelineRestormerHighlight/05a_diffbir_input_from08 \
+  --max-side 2048
+```
+
+再跑 DiffBIR：
+
 ```python
 %%bash
 cd /content/image_processing_final_project/methods/DiffBIR
@@ -485,8 +541,8 @@ python -u inference.py \
   --cfg_scale 4 \
   --noise_aug 0 \
   --steps 8 \
-  --input /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
-  --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08 \
+  --input /content/image_processing_final_project/results/PipelineRestormerHighlight/05a_diffbir_input_from08 \
+  --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05b_diffbir_small_from08 \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
@@ -499,6 +555,16 @@ python -u inference.py \
   --cldm_tiled \
   --cldm_tile_size 256 \
   --cldm_tile_stride 128
+```
+
+最後 resize 回 Restormer 輸出尺寸：
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py restore \
+  --diffbir results/PipelineRestormerHighlight/05b_diffbir_small_from08 \
+  --reference results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
+  --output results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08
 ```
 
 輸出會在：
@@ -557,6 +623,14 @@ python demo.py \
 
 ```python
 %%bash
+python scripts/resize_for_diffbir.py prepare \
+  --input results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all/Motion_Deblurring \
+  --output results/PipelineRestormerHighlight/05a_diffbir_input_all \
+  --max-side 2048
+```
+
+```python
+%%bash
 cd /content/image_processing_final_project/methods/DiffBIR
 python -u inference.py \
   --task sr \
@@ -568,8 +642,8 @@ python -u inference.py \
   --cfg_scale 4 \
   --noise_aug 0 \
   --steps 8 \
-  --input /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all/Motion_Deblurring \
-  --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_all \
+  --input /content/image_processing_final_project/results/PipelineRestormerHighlight/05a_diffbir_input_all \
+  --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05b_diffbir_small_all \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
@@ -582,6 +656,14 @@ python -u inference.py \
   --cldm_tiled \
   --cldm_tile_size 256 \
   --cldm_tile_stride 128
+```
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py restore \
+  --diffbir results/PipelineRestormerHighlight/05b_diffbir_small_all \
+  --reference results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all/Motion_Deblurring \
+  --output results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_all
 ```
 
 如果高亮還是太亮，可以試：
@@ -733,6 +815,18 @@ DiffBIR 官方環境以 Python 3.10 和 PyTorch 2.2.2 為基準；如果 Colab �
 ### DiffBIR exit status 137
 
 `returned non-zero exit status 137` 通常代表 Colab runtime 因為 RAM 或 GPU 記憶體不足，直接把 DiffBIR process 殺掉。這不是輸入路徑錯誤。
+
+如果 log 裡出現類似：
+
+```text
+input_size: torch.Size([1, 3, 5304, 7952])
+split to 41x62 = 2542 tiles
+Executing Encoder Task Queue: ... /231322
+```
+
+代表圖片尺寸太大，DiffBIR 即使用 tiled VAE 也會產生非常大的 task queue，Colab 很容易直接 kill。
+
+本文件的 DiffBIR 步驟已經改成先用 `scripts/resize_for_diffbir.py prepare --max-side 2048` 縮圖，DiffBIR 跑完後再用 `restore` resize 回 Restormer 輸出尺寸。這樣最終圖片大小仍然會跟 Restormer/原圖一致。
 
 先用第 8 張單張測試，不要直接跑全部圖片。如果單張可以跑，全部圖片再接著跑。
 
