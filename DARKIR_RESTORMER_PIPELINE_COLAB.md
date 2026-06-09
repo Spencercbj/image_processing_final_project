@@ -1,4 +1,4 @@
-# DarkIR 接 Restormer 的 Colab 完整流程
+# DarkIR 接 Restormer 再接 DiffBIR 的 Colab 完整流程
 
 這份文件說明如何在 Google Colab 上執行：
 
@@ -7,14 +7,15 @@
   -> DarkIR
   -> alpha 混回原圖，降低過亮感
   -> Restormer
+  -> DiffBIR diffusion 後處理
   -> 最終結果下載
 ```
 
 文件中有兩種接法：
 
 ```text
-baseline: 原圖 -> DarkIR -> alpha 混回原圖 -> Restormer Motion Deblurring
-高亮保護版: 原圖產生 soft mask -> DarkIR 前壓高亮 -> DarkIR -> 高亮區混回原圖 -> Restormer Motion Deblurring
+baseline: 原圖 -> DarkIR -> alpha 混回原圖 -> Restormer Motion Deblurring -> DiffBIR SR x1 去模糊/修復
+高亮保護版: 原圖產生 soft mask -> DarkIR 前壓高亮 -> DarkIR -> 高亮區混回原圖 -> Restormer Motion Deblurring -> DiffBIR SR x1 去模糊/修復
 ```
 
 建議先測第 8 張，確認效果後再跑全部圖片。
@@ -74,6 +75,7 @@ assert REPO_URL != "PASTE_YOUR_REPO_URL_HERE", "Set REPO_URL before running this
 ```python
 !test -f methods/DarkIR/archs/DarkIR.py && echo "DarkIR ok"
 !test -f methods/Restormer/demo.py && echo "Restormer ok"
+!test -f scripts/setup_diffbir_colab.sh && echo "DiffBIR setup script ok"
 !find img -maxdepth 1 -type f | head
 ```
 
@@ -91,7 +93,13 @@ assert REPO_URL != "PASTE_YOUR_REPO_URL_HERE", "Set REPO_URL before running this
 !bash scripts/setup_restormer_colab.sh
 ```
 
-檢查兩邊 import：
+最後安裝 DiffBIR。這一步會 clone `XPixelGroup/DiffBIR` 到 `methods/DiffBIR`，並安裝 DiffBIR 需要的套件。Colab 通常已經有 CUDA 版 PyTorch，所以這個 setup script 不會覆蓋 torch：
+
+```python
+!bash scripts/setup_diffbir_colab.sh
+```
+
+檢查三邊 import：
 
 ```python
 import sys, torch
@@ -104,6 +112,10 @@ print("DarkIR import ok")
 from runpy import run_path
 load_arch = run_path("/content/image_processing_final_project/methods/Restormer/basicsr/models/archs/restormer_arch.py")
 print("Restormer import ok", load_arch["Restormer"])
+
+sys.path.insert(0, "/content/image_processing_final_project/methods/DiffBIR")
+from diffbir.inference import BIDInferenceLoop
+print("DiffBIR import ok", BIDInferenceLoop)
 ```
 
 ## 4. 從 Google Drive 複製權重
@@ -187,6 +199,12 @@ methods/Restormer/Denoising/pretrained_models/real_denoising.pth
 Real_Denoising
 ```
 
+### 4.3 DiffBIR 權重
+
+DiffBIR 的 pretrained weights 會在第一次執行 `inference.py` 時自動下載，不需要先從 Google Drive 複製。
+
+建議 Colab 先保留足夠空間，因為 DiffBIR 會下載 Stable Diffusion、ControlNet、SwinIR/SCUNet 相關權重。
+
 ## 5. 單張測試：第 8 張
 
 ### 5.1 跑 DarkIR
@@ -267,6 +285,45 @@ results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring/
 --tile 2048 --tile_overlap 320
 ```
 
+### 5.4 把 Restormer 結果送進 DiffBIR
+
+這裡用 DiffBIR 的 `sr` task 做盲影像修復，並設定 `--upscale 1`，讓 DiffBIR 繼續處理模糊/失真但輸出尺寸維持和輸入相同。`--captioner none` 比 LLaVA 省 VRAM，也比較保守。
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/DiffBIR
+python -u inference.py \
+  --task sr \
+  --upscale 1 \
+  --version v2.1 \
+  --captioner none \
+  --pos_prompt '' \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
+  --cfg_scale 4 \
+  --noise_aug 0 \
+  --steps 10 \
+  --input /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring \
+  --output /content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08 \
+  --device cuda \
+  --precision fp16 \
+  --cleaner_tiled \
+  --cleaner_tile_size 256 \
+  --cleaner_tile_stride 128 \
+  --vae_encoder_tiled \
+  --vae_encoder_tile_size 256 \
+  --vae_decoder_tiled \
+  --vae_decoder_tile_size 256 \
+  --cldm_tiled \
+  --cldm_tile_size 512 \
+  --cldm_tile_stride 256
+```
+
+輸出會直接存在：
+
+```text
+results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/
+```
+
 ## 6. 跑全部圖片
 
 ### 6.1 跑全部 DarkIR
@@ -305,6 +362,37 @@ python demo.py \
   --result_dir /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_all \
   --tile 3072 \
   --tile_overlap 512
+```
+
+### 6.4 跑全部 DiffBIR
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/DiffBIR
+python -u inference.py \
+  --task sr \
+  --upscale 1 \
+  --version v2.1 \
+  --captioner none \
+  --pos_prompt '' \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
+  --cfg_scale 4 \
+  --noise_aug 0 \
+  --steps 10 \
+  --input /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_all/Motion_Deblurring \
+  --output /content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_all \
+  --device cuda \
+  --precision fp16 \
+  --cleaner_tiled \
+  --cleaner_tile_size 256 \
+  --cleaner_tile_stride 128 \
+  --vae_encoder_tiled \
+  --vae_encoder_tile_size 256 \
+  --vae_decoder_tiled \
+  --vae_decoder_tile_size 256 \
+  --cldm_tiled \
+  --cldm_tile_size 512 \
+  --cldm_tile_stride 256
 ```
 
 ## 7. 高亮保護版：DarkIR 接 Restormer
@@ -382,7 +470,44 @@ python demo.py \
 results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring/
 ```
 
-### 7.5 跑全部圖片
+### 7.5 第 8 張：把 Restormer 結果送進 DiffBIR
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/DiffBIR
+python -u inference.py \
+  --task sr \
+  --upscale 1 \
+  --version v2.1 \
+  --captioner none \
+  --pos_prompt '' \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
+  --cfg_scale 4 \
+  --noise_aug 0 \
+  --steps 10 \
+  --input /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
+  --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08 \
+  --device cuda \
+  --precision fp16 \
+  --cleaner_tiled \
+  --cleaner_tile_size 256 \
+  --cleaner_tile_stride 128 \
+  --vae_encoder_tiled \
+  --vae_encoder_tile_size 256 \
+  --vae_decoder_tiled \
+  --vae_decoder_tile_size 256 \
+  --cldm_tiled \
+  --cldm_tile_size 512 \
+  --cldm_tile_stride 256
+```
+
+輸出會在：
+
+```text
+results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08/
+```
+
+### 7.6 跑全部圖片
 
 ```python
 %%bash
@@ -430,6 +555,35 @@ python demo.py \
   --tile_overlap 512
 ```
 
+```python
+%%bash
+cd /content/image_processing_final_project/methods/DiffBIR
+python -u inference.py \
+  --task sr \
+  --upscale 1 \
+  --version v2.1 \
+  --captioner none \
+  --pos_prompt '' \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
+  --cfg_scale 4 \
+  --noise_aug 0 \
+  --steps 10 \
+  --input /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all/Motion_Deblurring \
+  --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_all \
+  --device cuda \
+  --precision fp16 \
+  --cleaner_tiled \
+  --cleaner_tile_size 256 \
+  --cleaner_tile_stride 128 \
+  --vae_encoder_tiled \
+  --vae_encoder_tile_size 256 \
+  --vae_decoder_tiled \
+  --vae_decoder_tile_size 256 \
+  --cldm_tiled \
+  --cldm_tile_size 512 \
+  --cldm_tile_stride 256
+```
+
 如果高亮還是太亮，可以試：
 
 ```text
@@ -473,11 +627,11 @@ results/PipelineRestormer/03_darkir_alpha07_restormer_denoise_from08/Real_Denois
 
 ## 9. 下載結果
 
-下載單張測試結果：
+下載單張測試的 DiffBIR 最終結果：
 
 ```python
 from google.colab import files
-files.download("/content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring/08_KFC_Rider_Rainy_Night_Delivery.png")
+files.download("/content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/08_KFC_Rider_Rainy_Night_Delivery.png")
 ```
 
 如果不確定輸出檔名，先列出：
@@ -490,26 +644,46 @@ files.download("/content/image_processing_final_project/results/PipelineRestorme
 
 ```python
 %cd /content/image_processing_final_project
-!zip -r darkir_restormer_pipeline_results.zip results/PipelineRestormer
+!zip -r darkir_restormer_diffbir_pipeline_results.zip results/PipelineRestormer
 ```
 
 下載 zip：
 
 ```python
 from google.colab import files
-files.download("darkir_restormer_pipeline_results.zip")
+files.download("darkir_restormer_diffbir_pipeline_results.zip")
 ```
 
 高亮保護版結果可以這樣下載：
 
 ```python
 %cd /content/image_processing_final_project
-!zip -r darkir_restormer_highlight_pipeline_results.zip results/PipelineRestormerHighlight
+!zip -r darkir_restormer_diffbir_highlight_pipeline_results.zip results/PipelineRestormerHighlight
 from google.colab import files
-files.download("darkir_restormer_highlight_pipeline_results.zip")
+files.download("darkir_restormer_diffbir_highlight_pipeline_results.zip")
 ```
 
 ## 10. 常見問題
+
+### CUDA is not available
+
+這代表目前 Colab runtime 沒有拿到 GPU，不是權重或圖片路徑沒有用到。
+
+先回到第 1 步確認：
+
+```text
+Runtime > Change runtime type > Hardware accelerator > GPU
+```
+
+切換後建議重新執行：
+
+```python
+!nvidia-smi
+import torch
+print("cuda available:", torch.cuda.is_available())
+```
+
+如果 `cuda available` 還是 `False`，代表目前 runtime 仍然不是 GPU，請重新連線或重開 runtime。
 
 ### Restormer 找不到權重
 
@@ -540,6 +714,22 @@ Restormer demo 會自動在 `result_dir` 下再建立 task 子資料夾。例如
 results/PipelineRestormer/03_xxx/Motion_Deblurring/
 ```
 
+### DiffBIR 輸出在哪裡
+
+DiffBIR 不會像 Restormer 一樣自動建立 task 子資料夾。它會把圖片直接存在 `--output` 指定的資料夾，例如：
+
+```text
+results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/
+```
+
+同時會產生一個 `prompt.csv`，記錄本次使用的 prompt。
+
+### DiffBIR 安裝失敗
+
+DiffBIR 官方環境以 Python 3.10 和 PyTorch 2.2.2 為基準；如果 Colab 的 Python 或 torch 版本變動導致安裝失敗，建議先重開一個乾淨 GPU runtime，再從第 1 步重新跑。
+
+本文件的 `scripts/setup_diffbir_colab.sh` 會保留 Colab 內建 torch，只安裝 DiffBIR 其他依賴，避免把可用的 CUDA torch 換掉。
+
 ### DarkIR 結果太亮
 
 降低 alpha：
@@ -563,4 +753,5 @@ results/PipelineRestormer/03_xxx/Motion_Deblurring/
 ```text
 DarkIR:    --tile-size 2048 --overlap 320
 Restormer: --tile 2048 --tile_overlap 320
+DiffBIR:   --cldm_tile_size 384 --cldm_tile_stride 192
 ```
