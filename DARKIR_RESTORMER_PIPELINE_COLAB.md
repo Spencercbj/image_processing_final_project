@@ -8,14 +8,15 @@
   -> alpha 混回原圖，降低過亮感
   -> Restormer
   -> DiffBIR diffusion 後處理
+  -> DiffBIR 結果保守混回 Restormer
   -> 最終結果下載
 ```
 
 文件中有兩種接法：
 
 ```text
-baseline: 原圖 -> DarkIR -> alpha 混回原圖 -> Restormer Motion Deblurring -> DiffBIR SR x1 去模糊/修復
-高亮保護版: 原圖產生 soft mask -> DarkIR 前壓高亮 -> DarkIR -> 高亮區混回原圖 -> Restormer Motion Deblurring -> DiffBIR SR x1 去模糊/修復
+baseline: 原圖 -> DarkIR -> alpha 混回原圖 -> Restormer Motion Deblurring -> DiffBIR SR x1 -> alpha 混回 Restormer
+高亮保護版: 原圖產生 soft mask -> DarkIR 前壓高亮 -> DarkIR -> 高亮區混回原圖 -> Restormer Motion Deblurring -> DiffBIR SR x1 -> alpha 混回 Restormer
 ```
 
 建議先測第 8 張，確認效果後再跑全部圖片。
@@ -76,6 +77,8 @@ assert REPO_URL != "PASTE_YOUR_REPO_URL_HERE", "Set REPO_URL before running this
 !test -f methods/DarkIR/archs/DarkIR.py && echo "DarkIR ok"
 !test -f methods/Restormer/demo.py && echo "Restormer ok"
 !test -f scripts/setup_diffbir_colab.sh && echo "DiffBIR setup script ok"
+!test -f scripts/resize_for_diffbir.py && echo "DiffBIR resize helper ok"
+!test -f scripts/blend_folders.py && echo "DiffBIR blend helper ok"
 !find img -maxdepth 1 -type f | head
 ```
 
@@ -310,10 +313,11 @@ python -u inference.py \
   --version v2.1 \
   --captioner none \
   --pos_prompt '' \
-  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
-  --cfg_scale 4 \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts, hallucinated details, artificial textures, dotted patterns, moire, oversharpened, outline artifacts' \
+  --cfg_scale 1.5 \
   --noise_aug 0 \
-  --steps 8 \
+  --steps 4 \
+  --start_point_type cond \
   --input /content/image_processing_final_project/results/PipelineRestormer/04a_diffbir_input_from08 \
   --output /content/image_processing_final_project/results/PipelineRestormer/04b_diffbir_small_from08 \
   --device cuda \
@@ -340,10 +344,21 @@ python scripts/resize_for_diffbir.py restore \
   --output results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08
 ```
 
-最終輸出會在：
+建議再把 DiffBIR 結果保守混回 Restormer，避免 diffusion 產生太多奇怪紋路。先用 `alpha 0.25`：
+
+```python
+%%bash
+python scripts/blend_folders.py \
+  --base results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring \
+  --enhanced results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08 \
+  --output results/PipelineRestormer/05_restormer_diffbir_alpha025_from08 \
+  --alpha 0.25
+```
+
+保守最終輸出會在：
 
 ```text
-results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/
+results/PipelineRestormer/05_restormer_diffbir_alpha025_from08/
 ```
 
 ## 6. 跑全部圖片
@@ -409,10 +424,11 @@ python -u inference.py \
   --version v2.1 \
   --captioner none \
   --pos_prompt '' \
-  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
-  --cfg_scale 4 \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts, hallucinated details, artificial textures, dotted patterns, moire, oversharpened, outline artifacts' \
+  --cfg_scale 1.5 \
   --noise_aug 0 \
-  --steps 8 \
+  --steps 4 \
+  --start_point_type cond \
   --input /content/image_processing_final_project/results/PipelineRestormer/04a_diffbir_input_all \
   --output /content/image_processing_final_project/results/PipelineRestormer/04b_diffbir_small_all \
   --device cuda \
@@ -437,6 +453,17 @@ python scripts/resize_for_diffbir.py restore \
   --diffbir results/PipelineRestormer/04b_diffbir_small_all \
   --reference results/PipelineRestormer/03_darkir_alpha07_restormer_all/Motion_Deblurring \
   --output results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_all
+```
+
+建議再把 DiffBIR 結果保守混回 Restormer：
+
+```python
+%%bash
+python scripts/blend_folders.py \
+  --base results/PipelineRestormer/03_darkir_alpha07_restormer_all/Motion_Deblurring \
+  --enhanced results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_all \
+  --output results/PipelineRestormer/05_restormer_diffbir_alpha025_all \
+  --alpha 0.25
 ```
 
 ## 7. 高亮保護版：DarkIR 接 Restormer
@@ -537,10 +564,11 @@ python -u inference.py \
   --version v2.1 \
   --captioner none \
   --pos_prompt '' \
-  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
-  --cfg_scale 4 \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts, hallucinated details, artificial textures, dotted patterns, moire, oversharpened, outline artifacts' \
+  --cfg_scale 1.5 \
   --noise_aug 0 \
-  --steps 8 \
+  --steps 4 \
+  --start_point_type cond \
   --input /content/image_processing_final_project/results/PipelineRestormerHighlight/05a_diffbir_input_from08 \
   --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05b_diffbir_small_from08 \
   --device cuda \
@@ -567,10 +595,21 @@ python scripts/resize_for_diffbir.py restore \
   --output results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08
 ```
 
-輸出會在：
+建議再把 DiffBIR 結果保守混回 Restormer：
+
+```python
+%%bash
+python scripts/blend_folders.py \
+  --base results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
+  --enhanced results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08 \
+  --output results/PipelineRestormerHighlight/06_restormer_diffbir_alpha025_from08 \
+  --alpha 0.25
+```
+
+保守最終輸出會在：
 
 ```text
-results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08/
+results/PipelineRestormerHighlight/06_restormer_diffbir_alpha025_from08/
 ```
 
 ### 7.6 跑全部圖片
@@ -638,10 +677,11 @@ python -u inference.py \
   --version v2.1 \
   --captioner none \
   --pos_prompt '' \
-  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
-  --cfg_scale 4 \
+  --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts, hallucinated details, artificial textures, dotted patterns, moire, oversharpened, outline artifacts' \
+  --cfg_scale 1.5 \
   --noise_aug 0 \
-  --steps 8 \
+  --steps 4 \
+  --start_point_type cond \
   --input /content/image_processing_final_project/results/PipelineRestormerHighlight/05a_diffbir_input_all \
   --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05b_diffbir_small_all \
   --device cuda \
@@ -664,6 +704,15 @@ python scripts/resize_for_diffbir.py restore \
   --diffbir results/PipelineRestormerHighlight/05b_diffbir_small_all \
   --reference results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all/Motion_Deblurring \
   --output results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_all
+```
+
+```python
+%%bash
+python scripts/blend_folders.py \
+  --base results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all/Motion_Deblurring \
+  --enhanced results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_all \
+  --output results/PipelineRestormerHighlight/06_restormer_diffbir_alpha025_all \
+  --alpha 0.25
 ```
 
 如果高亮還是太亮，可以試：
@@ -709,11 +758,11 @@ results/PipelineRestormer/03_darkir_alpha07_restormer_denoise_from08/Real_Denois
 
 ## 9. 下載結果
 
-下載單張測試的 DiffBIR 最終結果：
+下載單張測試的保守最終結果：
 
 ```python
 from google.colab import files
-files.download("/content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/08_KFC_Rider_Rainy_Night_Delivery.png")
+files.download("/content/image_processing_final_project/results/PipelineRestormer/05_restormer_diffbir_alpha025_from08/08_KFC_Rider_Rainy_Night_Delivery.png")
 ```
 
 如果不確定輸出檔名，先列出：
@@ -736,7 +785,7 @@ from google.colab import files
 files.download("darkir_restormer_diffbir_pipeline_results.zip")
 ```
 
-高亮保護版結果可以這樣下載：
+高亮保護版結果可以這樣下載。保守最終圖會在 `results/PipelineRestormerHighlight/06_restormer_diffbir_alpha025_*`：
 
 ```python
 %cd /content/image_processing_final_project
@@ -805,6 +854,40 @@ results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/
 ```
 
 同時會產生一個 `prompt.csv`，記錄本次使用的 prompt。
+
+### DiffBIR 產生太多奇怪紋路
+
+這是 diffusion hallucination。霓虹、窗格、反光和招牌細節很容易被 DiffBIR 當成「要補細節」的區域，導致網點、描邊、奇怪建築紋理或過銳化。
+
+本文件的 DiffBIR cell 已經使用保守設定：
+
+```text
+--cfg_scale 1.5
+--steps 4
+--start_point_type cond
+--noise_aug 0
+```
+
+如果結果還是太生成式，建議把 DiffBIR 結果混回 Restormer，而不是直接用 DiffBIR 當最終圖。高亮保護版第 8 張可以這樣做：
+
+```python
+%%bash
+python scripts/blend_folders.py \
+  --base results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
+  --enhanced results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08 \
+  --output results/PipelineRestormerHighlight/06_restormer_diffbir_alpha025_from08 \
+  --alpha 0.25
+```
+
+建議先試：
+
+```text
+alpha 0.15: 最保守，主要保留 Restormer
+alpha 0.25: 通常比較自然
+alpha 0.35: DiffBIR 修復感更強，但紋路風險也更高
+```
+
+如果 `alpha 0.25` 還是有怪紋，改用 `0.15`。
 
 ### DiffBIR 安裝失敗
 
