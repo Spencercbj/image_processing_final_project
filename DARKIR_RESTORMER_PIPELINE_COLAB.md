@@ -48,7 +48,7 @@ BRANCH_NAME = "PASTE_BRANCH_NAME_HERE"
 assert BRANCH_NAME != "PASTE_BRANCH_NAME_HERE", "Set BRANCH_NAME before running this cell."
 ```
 
-如果專案已經在 Colab：
+如果專案已經在 Colab，先進入既有 repo，再切到指定分支：
 
 ```python
 %cd /content/image_processing_final_project
@@ -58,7 +58,7 @@ assert BRANCH_NAME != "PASTE_BRANCH_NAME_HERE", "Set BRANCH_NAME before running 
 !git submodule update --init --recursive
 ```
 
-如果要重新 clone：
+如果要重新 clone，新 repo 會在 `git clone --branch {BRANCH_NAME}` 這一步直接切到指定分支，不需要再另外 `git switch`：
 
 ```python
 %cd /content
