@@ -10,6 +10,15 @@
   -> 最終結果下載
 ```
 
+文件中有兩種接法：
+
+```text
+baseline: 原圖 -> DarkIR -> alpha 混回原圖 -> EVSSM
+高亮保護版: 原圖產生 soft mask -> DarkIR 前壓高亮 -> DarkIR -> 高亮區混回原圖 -> EVSSM
+```
+
+建議先測第 8 張，確認效果後再跑全部圖片。
+
 所有程式區塊都可以直接貼到 Colab notebook cell 執行。若 cell 第一行是 `%%bash`，它必須放在該 cell 的第一行。
 
 ## 1. 開啟 GPU
@@ -306,7 +315,137 @@ python scripts/evssm_infer_folder.py \
   --blend crop
 ```
 
-## 8. 下載結果
+## 8. 高亮保護版：DarkIR 接 EVSSM
+
+這個版本會用原圖產生高亮 soft mask。DarkIR 前先把高亮區稍微壓暗，DarkIR 後再用同一張 mask 把高亮區混回原圖，避免 DarkIR 把燈、反光、白色區域推到過曝。
+
+預設先用：
+
+```text
+--threshold 0.82 --softness 0.12 --highlight-scale 0.75
+```
+
+### 8.1 第 8 張：產生 DarkIR protected input
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode prepare \
+  --original img \
+  --output results/PipelineHighlight/01_darkir_protected_input_from08 \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75 \
+  --start-index 8 \
+  --limit 1
+```
+
+### 8.2 第 8 張：用 protected input 跑 DarkIR
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input results/PipelineHighlight/01_darkir_protected_input_from08 \
+  --output results/PipelineHighlight/02_darkir_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --limit 1
+```
+
+### 8.3 第 8 張：用高亮 mask 合成 DarkIR 與原圖
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode composite \
+  --original img \
+  --darkir results/PipelineHighlight/02_darkir_from08 \
+  --output results/PipelineHighlight/03_darkir_highlight_protected_for_evssm_from08 \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75 \
+  --start-index 8 \
+  --limit 1
+```
+
+### 8.4 第 8 張：把合成結果送進 EVSSM
+
+```python
+%%bash
+python scripts/evssm_infer_folder.py \
+  --input results/PipelineHighlight/03_darkir_highlight_protected_for_evssm_from08 \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output results/PipelineHighlight/04_darkir_highlight_protected_evssm_from08 \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --limit 1
+```
+
+### 8.5 跑全部圖片
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode prepare \
+  --original img \
+  --output results/PipelineHighlight/01_darkir_protected_input_all \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75
+```
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input results/PipelineHighlight/01_darkir_protected_input_all \
+  --output results/PipelineHighlight/02_darkir_all \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop
+```
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode composite \
+  --original img \
+  --darkir results/PipelineHighlight/02_darkir_all \
+  --output results/PipelineHighlight/03_darkir_highlight_protected_for_evssm_all \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75
+```
+
+```python
+%%bash
+python scripts/evssm_infer_folder.py \
+  --input results/PipelineHighlight/03_darkir_highlight_protected_for_evssm_all \
+  --checkpoint checkpoints/net_g_realblur_j.pth \
+  --output results/PipelineHighlight/04_darkir_highlight_protected_evssm_all \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop
+```
+
+如果高亮還是太亮，可以試：
+
+```text
+--threshold 0.78 --highlight-scale 0.65
+```
+
+如果高亮區被壓得太暗，可以試：
+
+```text
+--threshold 0.86 --highlight-scale 0.85
+```
+
+## 9. 下載結果
 
 下載單張測試結果：
 
@@ -328,7 +467,15 @@ from google.colab import files
 files.download("darkir_evssm_pipeline_results.zip")
 ```
 
-## 9. 常見問題
+高亮保護版結果可以這樣下載：
+
+```python
+!zip -r darkir_evssm_highlight_pipeline_results.zip results/PipelineHighlight
+from google.colab import files
+files.download("darkir_evssm_highlight_pipeline_results.zip")
+```
+
+## 10. 常見問題
 
 ### DarkIR 結果太亮
 

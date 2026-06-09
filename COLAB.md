@@ -8,6 +8,7 @@ All command blocks below are intended to be pasted into Colab notebook cells. Bl
 
 For DarkIR, use [DARKIR_COLAB.md](DARKIR_COLAB.md).
 For the DarkIR-to-EVSSM pipeline, use [DARKIR_EVSSM_PIPELINE_COLAB.md](DARKIR_EVSSM_PIPELINE_COLAB.md).
+For the DarkIR-to-Restormer pipeline, use [DARKIR_RESTORMER_PIPELINE_COLAB.md](DARKIR_RESTORMER_PIPELINE_COLAB.md).
 
 ## 1. Enable GPU
 

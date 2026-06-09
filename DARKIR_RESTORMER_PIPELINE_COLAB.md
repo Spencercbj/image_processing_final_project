@@ -1,0 +1,566 @@
+# DarkIR 接 Restormer 的 Colab 完整流程
+
+這份文件說明如何在 Google Colab 上執行：
+
+```text
+原圖 img/
+  -> DarkIR
+  -> alpha 混回原圖，降低過亮感
+  -> Restormer
+  -> 最終結果下載
+```
+
+文件中有兩種接法：
+
+```text
+baseline: 原圖 -> DarkIR -> alpha 混回原圖 -> Restormer Motion Deblurring
+高亮保護版: 原圖產生 soft mask -> DarkIR 前壓高亮 -> DarkIR -> 高亮區混回原圖 -> Restormer Motion Deblurring
+```
+
+建議先測第 8 張，確認效果後再跑全部圖片。
+
+所有程式區塊都可以直接貼到 Colab notebook cell 執行。若 cell 第一行是 `%%bash`，它必須放在該 cell 的第一行。
+
+## 1. 開啟 GPU
+
+在 Colab 選：
+
+```text
+Runtime > Change runtime type > Hardware accelerator > GPU
+```
+
+確認 GPU：
+
+```python
+!nvidia-smi
+import torch
+print("torch:", torch.__version__)
+print("cuda available:", torch.cuda.is_available())
+print("device:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "no gpu")
+```
+
+## 2. 進入專案、切換分支並更新 submodules
+
+先設定你要使用的分支名稱：
+
+```python
+BRANCH_NAME = "PASTE_BRANCH_NAME_HERE"
+assert BRANCH_NAME != "PASTE_BRANCH_NAME_HERE", "Set BRANCH_NAME before running this cell."
+```
+
+如果專案已經在 Colab：
+
+```python
+%cd /content/image_processing_final_project
+!git fetch origin
+!git switch {BRANCH_NAME}
+!git pull origin {BRANCH_NAME}
+!git submodule update --init --recursive
+```
+
+如果要重新 clone：
+
+```python
+%cd /content
+REPO_URL = "PASTE_YOUR_REPO_URL_HERE"
+assert REPO_URL != "PASTE_YOUR_REPO_URL_HERE", "Set REPO_URL before running this cell."
+!git clone --recursive --branch {BRANCH_NAME} {REPO_URL} image_processing_final_project
+%cd /content/image_processing_final_project
+!git submodule update --init --recursive
+```
+
+確認檔案存在：
+
+```python
+!test -f methods/DarkIR/archs/DarkIR.py && echo "DarkIR ok"
+!test -f methods/Restormer/demo.py && echo "Restormer ok"
+!find img -maxdepth 1 -type f | head
+```
+
+## 3. 安裝環境
+
+先安裝 DarkIR 依賴：
+
+```python
+!bash scripts/setup_darkir_colab.sh
+```
+
+再安裝 Restormer demo 需要的依賴：
+
+```python
+!bash scripts/setup_restormer_colab.sh
+```
+
+檢查兩邊 import：
+
+```python
+import sys, torch
+print("torch:", torch.__version__, "cuda:", torch.cuda.is_available())
+
+sys.path.insert(0, "/content/image_processing_final_project/methods/DarkIR/archs")
+from DarkIR import DarkIR
+print("DarkIR import ok")
+
+from runpy import run_path
+load_arch = run_path("/content/image_processing_final_project/methods/Restormer/basicsr/models/archs/restormer_arch.py")
+print("Restormer import ok", load_arch["Restormer"])
+```
+
+## 4. 從 Google Drive 複製權重
+
+掛載 Drive：
+
+```python
+from google.colab import drive
+drive.mount("/content/drive")
+```
+
+### 4.1 DarkIR 權重
+
+本流程假設你使用：
+
+```text
+DarkIR_384.pt
+```
+
+並搭配：
+
+```text
+methods/DarkIR/options/inference/real_lsrw.yml
+```
+
+假設檔案在：
+
+```text
+MyDrive/DarkIR_checkpoints/DarkIR_384.pt
+```
+
+複製到 Colab：
+
+```python
+%cd /content/image_processing_final_project
+
+!mkdir -p methods/DarkIR/models
+!cp /content/drive/MyDrive/DarkIR_checkpoints/DarkIR_384.pt methods/DarkIR/models/
+!ls -lh methods/DarkIR/models
+```
+
+### 4.2 Restormer 權重
+
+建議先用 Restormer 的 Motion Deblurring 權重接在 DarkIR 後面：
+
+```text
+motion_deblurring.pth
+```
+
+Restormer demo 預期它放在：
+
+```text
+methods/Restormer/Motion_Deblurring/pretrained_models/motion_deblurring.pth
+```
+
+假設你的權重在：
+
+```text
+MyDrive/Restormer_checkpoints/motion_deblurring.pth
+```
+
+複製到 Colab：
+
+```python
+%cd /content/image_processing_final_project
+
+!mkdir -p methods/Restormer/Motion_Deblurring/pretrained_models
+!cp /content/drive/MyDrive/Restormer_checkpoints/motion_deblurring.pth methods/Restormer/Motion_Deblurring/pretrained_models/
+!ls -lh methods/Restormer/Motion_Deblurring/pretrained_models
+```
+
+如果你想試 Restormer Real Denoising，權重檔名和位置是：
+
+```text
+methods/Restormer/Denoising/pretrained_models/real_denoising.pth
+```
+
+對應 task 會是：
+
+```text
+Real_Denoising
+```
+
+## 5. 單張測試：第 8 張
+
+### 5.1 跑 DarkIR
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/PipelineRestormer/01_darkir_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --start-index 8 \
+  --limit 1
+```
+
+如果 OOM，改用：
+
+```text
+--tile-size 2048 --overlap 320
+```
+
+如果 A100 80GB 很空，可以試：
+
+```text
+--tile-size 4096 --overlap 640
+```
+
+### 5.2 將 DarkIR 結果混回原圖
+
+先試 `alpha=0.7`：
+
+```python
+%%bash
+python scripts/blend_with_original.py \
+  --original img \
+  --darkir results/PipelineRestormer/01_darkir_from08 \
+  --output results/PipelineRestormer/02_darkir_alpha07_for_restormer_from08 \
+  --alpha 0.7 \
+  --start-index 8 \
+  --limit 1
+```
+
+建議比較：
+
+```text
+alpha 0.6: 更接近原圖，壓亮度更強
+alpha 0.7: 折衷，建議先看
+alpha 0.8: 更接近 DarkIR，增亮/修復效果更強
+```
+
+### 5.3 用混合結果跑 Restormer Motion Deblurring
+
+Restormer demo 要在 `methods/Restormer` 目錄下執行，所以這個 cell 會先 `cd` 進去。`input_dir` 和 `result_dir` 使用絕對路徑。
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/Restormer
+python demo.py \
+  --task Motion_Deblurring \
+  --input_dir /content/image_processing_final_project/results/PipelineRestormer/02_darkir_alpha07_for_restormer_from08 \
+  --result_dir /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_from08 \
+  --tile 3072 \
+  --tile_overlap 512
+```
+
+Restormer 會把結果存在 task 子資料夾中：
+
+```text
+results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring/
+```
+
+如果 OOM，改成：
+
+```text
+--tile 2048 --tile_overlap 320
+```
+
+## 6. 跑全部圖片
+
+### 6.1 跑全部 DarkIR
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input img \
+  --output results/PipelineRestormer/01_darkir_all \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop
+```
+
+### 6.2 全部混回原圖
+
+```python
+%%bash
+python scripts/blend_with_original.py \
+  --original img \
+  --darkir results/PipelineRestormer/01_darkir_all \
+  --output results/PipelineRestormer/02_darkir_alpha07_for_restormer_all \
+  --alpha 0.7
+```
+
+### 6.3 跑全部 Restormer
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/Restormer
+python demo.py \
+  --task Motion_Deblurring \
+  --input_dir /content/image_processing_final_project/results/PipelineRestormer/02_darkir_alpha07_for_restormer_all \
+  --result_dir /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_all \
+  --tile 3072 \
+  --tile_overlap 512
+```
+
+## 7. 高亮保護版：DarkIR 接 Restormer
+
+這個版本會用原圖產生高亮 soft mask。DarkIR 前先把高亮區稍微壓暗，DarkIR 後再用同一張 mask 把高亮區混回原圖，最後 Restormer 的 input 會吃 composite output，不直接吃 DarkIR output。
+
+預設先用：
+
+```text
+--threshold 0.82 --softness 0.12 --highlight-scale 0.75
+```
+
+### 7.1 第 8 張：產生 DarkIR protected input
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode prepare \
+  --original img \
+  --output results/PipelineRestormerHighlight/01_darkir_protected_input_from08 \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75 \
+  --start-index 8 \
+  --limit 1
+```
+
+### 7.2 第 8 張：用 protected input 跑 DarkIR
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input results/PipelineRestormerHighlight/01_darkir_protected_input_from08 \
+  --output results/PipelineRestormerHighlight/02_darkir_from08 \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop \
+  --limit 1
+```
+
+### 7.3 第 8 張：用高亮 mask 合成 DarkIR 與原圖
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode composite \
+  --original img \
+  --darkir results/PipelineRestormerHighlight/02_darkir_from08 \
+  --output results/PipelineRestormerHighlight/03_darkir_highlight_protected_for_restormer_from08 \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75 \
+  --start-index 8 \
+  --limit 1
+```
+
+### 7.4 第 8 張：把合成結果送進 Restormer Motion Deblurring
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/Restormer
+python demo.py \
+  --task Motion_Deblurring \
+  --input_dir /content/image_processing_final_project/results/PipelineRestormerHighlight/03_darkir_highlight_protected_for_restormer_from08 \
+  --result_dir /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08 \
+  --tile 3072 \
+  --tile_overlap 512
+```
+
+輸出會在：
+
+```text
+results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring/
+```
+
+### 7.5 跑全部圖片
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode prepare \
+  --original img \
+  --output results/PipelineRestormerHighlight/01_darkir_protected_input_all \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75
+```
+
+```python
+%%bash
+python scripts/darkir_infer_folder.py \
+  --input results/PipelineRestormerHighlight/01_darkir_protected_input_all \
+  --output results/PipelineRestormerHighlight/02_darkir_all \
+  --config methods/DarkIR/options/inference/real_lsrw.yml \
+  --checkpoint methods/DarkIR/models/DarkIR_384.pt \
+  --tile-size 3072 \
+  --overlap 512 \
+  --blend crop
+```
+
+```python
+%%bash
+python scripts/protect_highlights_for_darkir.py \
+  --mode composite \
+  --original img \
+  --darkir results/PipelineRestormerHighlight/02_darkir_all \
+  --output results/PipelineRestormerHighlight/03_darkir_highlight_protected_for_restormer_all \
+  --threshold 0.82 \
+  --softness 0.12 \
+  --highlight-scale 0.75
+```
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/Restormer
+python demo.py \
+  --task Motion_Deblurring \
+  --input_dir /content/image_processing_final_project/results/PipelineRestormerHighlight/03_darkir_highlight_protected_for_restormer_all \
+  --result_dir /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all \
+  --tile 3072 \
+  --tile_overlap 512
+```
+
+如果高亮還是太亮，可以試：
+
+```text
+--threshold 0.78 --highlight-scale 0.65
+```
+
+如果高亮區被壓得太暗，可以試：
+
+```text
+--threshold 0.86 --highlight-scale 0.85
+```
+
+## 8. 可選：改用 Restormer Real Denoising
+
+如果你覺得 DarkIR 後面主要剩雜訊，不是模糊，可以試 Restormer 的 `Real_Denoising`。
+
+先放權重：
+
+```text
+methods/Restormer/Denoising/pretrained_models/real_denoising.pth
+```
+
+然後跑：
+
+```python
+%%bash
+cd /content/image_processing_final_project/methods/Restormer
+python demo.py \
+  --task Real_Denoising \
+  --input_dir /content/image_processing_final_project/results/PipelineRestormer/02_darkir_alpha07_for_restormer_from08 \
+  --result_dir /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_denoise_from08 \
+  --tile 3072 \
+  --tile_overlap 512
+```
+
+輸出會在：
+
+```text
+results/PipelineRestormer/03_darkir_alpha07_restormer_denoise_from08/Real_Denoising/
+```
+
+## 9. 下載結果
+
+下載單張測試結果：
+
+```python
+from google.colab import files
+files.download("/content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring/08_KFC_Rider_Rainy_Night_Delivery.png")
+```
+
+如果不確定輸出檔名，先列出：
+
+```python
+!find /content/image_processing_final_project/results/PipelineRestormer -type f | head -50
+```
+
+壓縮全部 pipeline 結果：
+
+```python
+%cd /content/image_processing_final_project
+!zip -r darkir_restormer_pipeline_results.zip results/PipelineRestormer
+```
+
+下載 zip：
+
+```python
+from google.colab import files
+files.download("darkir_restormer_pipeline_results.zip")
+```
+
+高亮保護版結果可以這樣下載：
+
+```python
+%cd /content/image_processing_final_project
+!zip -r darkir_restormer_highlight_pipeline_results.zip results/PipelineRestormerHighlight
+from google.colab import files
+files.download("darkir_restormer_highlight_pipeline_results.zip")
+```
+
+## 10. 常見問題
+
+### Restormer 找不到權重
+
+Motion Deblurring 權重必須在：
+
+```text
+methods/Restormer/Motion_Deblurring/pretrained_models/motion_deblurring.pth
+```
+
+確認：
+
+```python
+!ls -lh methods/Restormer/Motion_Deblurring/pretrained_models
+```
+
+### Restormer 輸出在哪裡
+
+Restormer demo 會自動在 `result_dir` 下再建立 task 子資料夾。例如：
+
+```text
+--result_dir results/PipelineRestormer/03_xxx
+--task Motion_Deblurring
+```
+
+實際輸出會在：
+
+```text
+results/PipelineRestormer/03_xxx/Motion_Deblurring/
+```
+
+### DarkIR 結果太亮
+
+降低 alpha：
+
+```text
+--alpha 0.6
+```
+
+### DarkIR 效果被削弱太多
+
+提高 alpha：
+
+```text
+--alpha 0.8
+```
+
+### OOM
+
+先降 tile：
+
+```text
+DarkIR:    --tile-size 2048 --overlap 320
+Restormer: --tile 2048 --tile_overlap 320
+```

@@ -3,6 +3,7 @@
 這份教本是給 Colab notebook 使用的。所有程式區塊都可以直接貼到 Colab cell 執行；如果 cell 第一行是 `%%bash`，它必須放在該 cell 的第一行。
 
 如果你要跑「DarkIR -> 混回原圖 -> EVSSM」串接流程，請看 [DARKIR_EVSSM_PIPELINE_COLAB.md](DARKIR_EVSSM_PIPELINE_COLAB.md)。
+如果你要跑「DarkIR -> 混回原圖 -> Restormer」串接流程，請看 [DARKIR_RESTORMER_PIPELINE_COLAB.md](DARKIR_RESTORMER_PIPELINE_COLAB.md)。
 
 本教本預設你要使用的模型是：
 
