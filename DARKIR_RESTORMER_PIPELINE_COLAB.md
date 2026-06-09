@@ -301,21 +301,21 @@ python -u inference.py \
   --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
   --cfg_scale 4 \
   --noise_aug 0 \
-  --steps 10 \
+  --steps 8 \
   --input /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_from08/Motion_Deblurring \
   --output /content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08 \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
-  --cleaner_tile_size 256 \
-  --cleaner_tile_stride 128 \
+  --cleaner_tile_size 128 \
+  --cleaner_tile_stride 64 \
   --vae_encoder_tiled \
-  --vae_encoder_tile_size 256 \
+  --vae_encoder_tile_size 128 \
   --vae_decoder_tiled \
-  --vae_decoder_tile_size 256 \
+  --vae_decoder_tile_size 128 \
   --cldm_tiled \
-  --cldm_tile_size 512 \
-  --cldm_tile_stride 256
+  --cldm_tile_size 256 \
+  --cldm_tile_stride 128
 ```
 
 輸出會直接存在：
@@ -378,21 +378,21 @@ python -u inference.py \
   --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
   --cfg_scale 4 \
   --noise_aug 0 \
-  --steps 10 \
+  --steps 8 \
   --input /content/image_processing_final_project/results/PipelineRestormer/03_darkir_alpha07_restormer_all/Motion_Deblurring \
   --output /content/image_processing_final_project/results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_all \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
-  --cleaner_tile_size 256 \
-  --cleaner_tile_stride 128 \
+  --cleaner_tile_size 128 \
+  --cleaner_tile_stride 64 \
   --vae_encoder_tiled \
-  --vae_encoder_tile_size 256 \
+  --vae_encoder_tile_size 128 \
   --vae_decoder_tiled \
-  --vae_decoder_tile_size 256 \
+  --vae_decoder_tile_size 128 \
   --cldm_tiled \
-  --cldm_tile_size 512 \
-  --cldm_tile_stride 256
+  --cldm_tile_size 256 \
+  --cldm_tile_stride 128
 ```
 
 ## 7. 高亮保護版：DarkIR 接 Restormer
@@ -484,21 +484,21 @@ python -u inference.py \
   --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
   --cfg_scale 4 \
   --noise_aug 0 \
-  --steps 10 \
+  --steps 8 \
   --input /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
   --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_from08 \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
-  --cleaner_tile_size 256 \
-  --cleaner_tile_stride 128 \
+  --cleaner_tile_size 128 \
+  --cleaner_tile_stride 64 \
   --vae_encoder_tiled \
-  --vae_encoder_tile_size 256 \
+  --vae_encoder_tile_size 128 \
   --vae_decoder_tiled \
-  --vae_decoder_tile_size 256 \
+  --vae_decoder_tile_size 128 \
   --cldm_tiled \
-  --cldm_tile_size 512 \
-  --cldm_tile_stride 256
+  --cldm_tile_size 256 \
+  --cldm_tile_stride 128
 ```
 
 輸出會在：
@@ -567,21 +567,21 @@ python -u inference.py \
   --neg_prompt 'low quality, blurry, low-resolution, noisy, unsharp, weird textures, artifacts' \
   --cfg_scale 4 \
   --noise_aug 0 \
-  --steps 10 \
+  --steps 8 \
   --input /content/image_processing_final_project/results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_all/Motion_Deblurring \
   --output /content/image_processing_final_project/results/PipelineRestormerHighlight/05_darkir_highlight_protected_restormer_diffbir_all \
   --device cuda \
   --precision fp16 \
   --cleaner_tiled \
-  --cleaner_tile_size 256 \
-  --cleaner_tile_stride 128 \
+  --cleaner_tile_size 128 \
+  --cleaner_tile_stride 64 \
   --vae_encoder_tiled \
-  --vae_encoder_tile_size 256 \
+  --vae_encoder_tile_size 128 \
   --vae_decoder_tiled \
-  --vae_decoder_tile_size 256 \
+  --vae_decoder_tile_size 128 \
   --cldm_tiled \
-  --cldm_tile_size 512 \
-  --cldm_tile_stride 256
+  --cldm_tile_size 256 \
+  --cldm_tile_stride 128
 ```
 
 如果高亮還是太亮，可以試：
@@ -730,6 +730,23 @@ DiffBIR 官方環境以 Python 3.10 和 PyTorch 2.2.2 為基準；如果 Colab �
 
 本文件的 `scripts/setup_diffbir_colab.sh` 會保留 Colab 內建 torch，只安裝 DiffBIR 其他依賴，避免把可用的 CUDA torch 換掉。
 
+### DiffBIR exit status 137
+
+`returned non-zero exit status 137` 通常代表 Colab runtime 因為 RAM 或 GPU 記憶體不足，直接把 DiffBIR process 殺掉。這不是輸入路徑錯誤。
+
+先用第 8 張單張測試，不要直接跑全部圖片。如果單張可以跑，全部圖片再接著跑。
+
+如果還是 137，把 DiffBIR tile 再降一級：
+
+```text
+--cleaner_tile_size 96 --cleaner_tile_stride 48
+--vae_encoder_tile_size 96
+--vae_decoder_tile_size 96
+--cldm_tile_size 192 --cldm_tile_stride 96
+```
+
+如果仍然 137，請改用 Colab High-RAM runtime 或更大 VRAM GPU。DiffBIR 會載入 Stable Diffusion/ControlNet 相關權重，普通 Colab runtime 很容易被殺掉。
+
 ### DarkIR 結果太亮
 
 降低 alpha：
@@ -753,5 +770,5 @@ DiffBIR 官方環境以 Python 3.10 和 PyTorch 2.2.2 為基準；如果 Colab �
 ```text
 DarkIR:    --tile-size 2048 --overlap 320
 Restormer: --tile 2048 --tile_overlap 320
-DiffBIR:   --cldm_tile_size 384 --cldm_tile_stride 192
+DiffBIR:   --cldm_tile_size 192 --cldm_tile_stride 96
 ```
