@@ -41,7 +41,7 @@ python -m pip install \
   bitsandbytes==0.44.1 \
   transformers==4.37.2 \
   tokenizers==0.15.1 \
-  sentencepiece==0.1.99 \
+  "sentencepiece>=0.2.0" \
   fairscale==0.4.4
 
 python - <<'PY'
