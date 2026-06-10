@@ -6,6 +6,9 @@
 - 完整實驗紀錄：[`experiment_log.md`](experiment_log.md)
 - 隔夜衝刺總結 + 最終建議：[`OVERNIGHT_RESULTS.md`](OVERNIGHT_RESULTS.md)
 - 待辦/想法清單：[`ideas.md`](ideas.md)
+- all-pipelines 分析與方法修正：[`ALL_PIPELINES_ANALYSIS.md`](ALL_PIPELINES_ANALYSIS.md)
+- 改良版 DarkIR/Restormer/DiffBIR Colab：[`DARKIR_RESTORMER_DIFFBIR_V2_COLAB.md`](DARKIR_RESTORMER_DIFFBIR_V2_COLAB.md)
+- FFTformer Colab 實測：[`FFTFORMER_COLAB_EXPERIMENT.md`](FFTFORMER_COLAB_EXPERIMENT.md)
 
 ---
 
