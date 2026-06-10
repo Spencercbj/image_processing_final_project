@@ -553,6 +553,13 @@ python scripts/resize_for_diffbir.py prepare \
   --max-side 2048
 ```
 
+確認 DiffBIR input 資料夾已產生：
+
+```python
+!test -d results/PipelineRestormerHighlight/05a_diffbir_input_from08 && echo "DiffBIR input folder ok"
+!find results/PipelineRestormerHighlight/05a_diffbir_input_from08 -maxdepth 1 -type f | head
+```
+
 再跑 DiffBIR：
 
 ```python
@@ -854,6 +861,29 @@ results/PipelineRestormer/04_darkir_alpha07_restormer_diffbir_from08/
 ```
 
 同時會產生一個 `prompt.csv`，記錄本次使用的 prompt。
+
+### DiffBIR: Please put your low-quality images in a folder
+
+這代表 `--input` 指到的路徑不是資料夾，或資料夾還沒有產生。通常是少跑了 DiffBIR 前面的 prepare 步驟。
+
+以高亮保護版第 8 張為例，先跑：
+
+```python
+%%bash
+python scripts/resize_for_diffbir.py prepare \
+  --input results/PipelineRestormerHighlight/04_darkir_highlight_protected_restormer_from08/Motion_Deblurring \
+  --output results/PipelineRestormerHighlight/05a_diffbir_input_from08 \
+  --max-side 2048
+```
+
+再確認：
+
+```python
+!test -d results/PipelineRestormerHighlight/05a_diffbir_input_from08 && echo "DiffBIR input folder ok"
+!find results/PipelineRestormerHighlight/05a_diffbir_input_from08 -maxdepth 1 -type f | head
+```
+
+如果 `find` 沒有列出圖片，代表前面的 Restormer 輸出路徑也可能不存在或是空的。
 
 ### DiffBIR 產生太多奇怪紋路
 
